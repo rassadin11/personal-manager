@@ -1,0 +1,6 @@
+{
+  "id": "personal-manager",
+  "displayName": "Personal Manager",
+  "description": "Личный менеджер: задачи с напоминаниями, календарь, финансы, заметки.",
+  "configSchema": {}
+}

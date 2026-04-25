@@ -1,0 +1,25 @@
+{
+  "name": "personal-manager",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal manager plugin for OpenClaw — tasks, calendar, finances, notes",
+  "openclaw": {
+    "extensions": ["./src/index.ts"],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2",
+      "minGatewayVersion": "2026.3.24-beta.2"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.32.0",
+    "openclaw": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}
