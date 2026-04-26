@@ -6,7 +6,8 @@ cp /config/openclaw.json /tmp/openclaw.json
 export OPENCLAW_CONFIG_PATH=/tmp/openclaw.json
 
 # Register plugin directly in config (symlink target: /root/.openclaw/extensions/personal-manager -> /app)
-jq '.plugins.entries["personal-manager"] = {"enabled": true} |
+jq '.plugins.entries["anthropic"] = {"enabled": false} |
+    .plugins.entries["personal-manager"] = {"enabled": true} |
     .plugins.installs["personal-manager"] = {
       "source": "path",
       "sourcePath": "/app",
