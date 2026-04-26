@@ -88,17 +88,28 @@ export function registerReminderTools(api: PluginApi): void {
       if (agentCtx.sessionKey) lastSessionKey = agentCtx.sessionKey;
       if (agentCtx.channelId) lastChannelId = agentCtx.channelId;
 
-      // Inject overdue reminders into context
-      const now = new Date().toISOString();
+      // Inject current datetime so model can resolve relative times
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const nowLocal = now.toLocaleString("ru-RU", {
+        dateStyle: "short",
+        timeStyle: "short",
+        timeZone: process.env.TZ ?? "Europe/Moscow",
+      });
+
       const due = db
         .prepare("SELECT * FROM reminders WHERE remind_at <= ? ORDER BY remind_at ASC")
-        .all(now);
-      if (due.length === 0) return;
-      const lines = due.map(
-        (r) => `• [${r["id"]}] ${r["title"]} (было в ${formatRemindAt(String(r["remind_at"]))})`
-      );
+        .all(nowIso);
+
+      const overdueBlock =
+        due.length > 0
+          ? `\n\n🔔 Просроченные напоминания:\n${due
+              .map((r) => `• [${r["id"]}] ${r["title"]} (было в ${formatRemindAt(String(r["remind_at"]))})`)
+              .join("\n")}\n\nСообщи пользователю об этих напоминаниях и спроси, что с ними сделать.`
+          : "";
+
       return {
-        prependContext: `🔔 Просроченные напоминания:\n${lines.join("\n")}\n\nСообщи пользователю об этих напоминаниях и спроси, что с ними сделать.`,
+        prependContext: `🕐 Текущее время: ${nowLocal} (${nowIso})${overdueBlock}`,
       };
     },
   });
