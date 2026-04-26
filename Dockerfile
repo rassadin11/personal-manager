@@ -12,4 +12,4 @@ ENV PM_DATA_DIR=/data
 ENV OPENCLAW_CONFIG_PATH=/config/openclaw.json
 VOLUME ["/data"]
 
-CMD ["npx", "openclaw", "start"]
+CMD ["npx", "openclaw", "gateway"]
