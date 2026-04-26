@@ -25,6 +25,7 @@ const SYSTEM_PROMPT = `Ты — личный ассистент по имени 
 export default definePluginEntry({
   id: "personal-manager",
   name: "Personal Manager",
+  description: "Личный менеджер: задачи, напоминания, финансы, заметки.",
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   register(api: any) {
     api.registerHook({
