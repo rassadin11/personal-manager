@@ -1,12 +1,19 @@
 #!/bin/sh
 set -e
 
-# Config is mounted read-only — copy to writable location so plugin install can update it
+# Copy read-only config to writable location
 cp /config/openclaw.json /tmp/openclaw.json
 export OPENCLAW_CONFIG_PATH=/tmp/openclaw.json
 
-# Register the local plugin (idempotent — safe to run on every start)
-npx openclaw plugins install /app --yes 2>/dev/null || \
-  npx openclaw plugins install --path /app --yes 2>/dev/null || true
+# Register plugin directly in config (symlink target: /root/.openclaw/extensions/personal-manager -> /app)
+jq '.plugins.entries["personal-manager"] = {"enabled": true} |
+    .plugins.installs["personal-manager"] = {
+      "source": "path",
+      "sourcePath": "/app",
+      "installPath": "/root/.openclaw/extensions/personal-manager",
+      "version": "0.1.0",
+      "installedAt": "2026-04-25T09:44:29.178Z"
+    }' /tmp/openclaw.json > /tmp/openclaw.json.tmp \
+  && mv /tmp/openclaw.json.tmp /tmp/openclaw.json
 
 exec npx openclaw gateway
