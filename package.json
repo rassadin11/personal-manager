@@ -5,13 +5,14 @@
   "type": "module",
   "description": "Personal manager plugin for OpenClaw — tasks, calendar, finances, notes",
   "openclaw": {
-    "extensions": ["./src/index.ts"],
+    "extensions": ["./dist/index.js"],
     "compat": {
       "pluginApi": ">=2026.3.24-beta.2",
       "minGatewayVersion": "2026.3.24-beta.2"
     }
   },
   "scripts": {
+    "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

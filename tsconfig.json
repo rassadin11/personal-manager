@@ -8,8 +8,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "noEmit": true,
-    "allowImportingTsExtensions": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
     "verbatimModuleSyntax": false,
     "isolatedModules": true
   },
