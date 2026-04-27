@@ -3,30 +3,16 @@ import { db } from "../db.js";
 
 type Params = Record<string, unknown>;
 type ToolResult = { content: Array<{ type: "text"; text: string }> };
-type CronService = {
-  list: (opts?: { includeDisabled?: boolean }) => Promise<Array<{ id?: string; name?: string }>>;
-  add: (input: Record<string, unknown>) => Promise<{ id?: string } | unknown>;
-  remove: (id: string) => Promise<unknown>;
-};
 type RegisterToolCfg = {
   name: string;
   description: string;
   parameters: unknown;
   execute: (_toolCallId: string, p: Params) => Promise<ToolResult>;
 };
-type RegisterHookCfg = {
-  hookName: string;
-  handler: (event: Record<string, unknown>, ctx: Record<string, unknown>) => unknown;
-};
 type PluginApi = {
   registerTool: (cfg: RegisterToolCfg) => void;
-  registerHook: (cfg: RegisterHookCfg) => void;
+  on: (event: string, handler: (...args: unknown[]) => unknown) => void;
 };
-
-// Shared state captured from OpenClaw hooks
-let cronService: CronService | null = null;
-let lastSessionKey: string | null = null;
-let lastChannelId: string | null = null;
 
 function text(msg: string): ToolResult {
   return { content: [{ type: "text", text: msg }] };
@@ -40,84 +26,37 @@ function formatRemindAt(iso: string): string {
   }
 }
 
-async function createCronForReminder(
-  id: number,
-  title: string,
-  remindAt: Date,
-  sessionKey: string,
-  channelId: string,
-): Promise<string | null> {
-  if (!cronService) return null;
-  try {
-    const m = remindAt.getMinutes();
-    const h = remindAt.getHours();
-    const d = remindAt.getDate();
-    const mo = remindAt.getMonth() + 1;
-    const result = await cronService.add({
-      name: `reminder-${id}`,
-      description: title,
-      enabled: true,
-      schedule: { kind: "cron", expr: `${m} ${h} ${d} ${mo} *` },
-      sessionTarget: sessionKey,
-      wakeMode: "now",
-      payload: { kind: "agentTurn", text: `🔔 Напоминание: ${title}` },
-      delivery: { mode: "announce", channel: channelId },
-    });
-    const r = result as Record<string, unknown>;
-    return typeof r?.id === "string" ? r.id : null;
-  } catch {
-    return null;
-  }
-}
-
 export function registerReminderTools(api: PluginApi): void {
-  // Capture cron service when gateway starts
-  api.registerHook({
-    hookName: "gateway_start",
-    handler(_event, ctx) {
-      const c = ctx as { getCron?: () => CronService | undefined };
-      cronService = c.getCron?.() ?? null;
-    },
-  });
+  // Inject current time and overdue reminders into the prompt
+  api.on("before_prompt_build", async () => {
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const nowLocal = now.toLocaleString("ru-RU", {
+      dateStyle: "short",
+      timeStyle: "short",
+      timeZone: process.env.TZ ?? "Europe/Moscow",
+    });
 
-  // Capture session info on each conversation turn
-  api.registerHook({
-    hookName: "before_prompt_build",
-    handler(event, ctx) {
-      const agentCtx = ctx as { sessionKey?: string; channelId?: string };
-      if (agentCtx.sessionKey) lastSessionKey = agentCtx.sessionKey;
-      if (agentCtx.channelId) lastChannelId = agentCtx.channelId;
+    const due = db
+      .prepare("SELECT * FROM reminders WHERE remind_at <= ? ORDER BY remind_at ASC")
+      .all(nowIso);
 
-      // Inject current datetime so model can resolve relative times
-      const now = new Date();
-      const nowIso = now.toISOString();
-      const nowLocal = now.toLocaleString("ru-RU", {
-        dateStyle: "short",
-        timeStyle: "short",
-        timeZone: process.env.TZ ?? "Europe/Moscow",
-      });
+    const overdueBlock =
+      due.length > 0
+        ? `\n\n🔔 Просроченные напоминания:\n${due
+            .map((r) => `• [${r["id"]}] ${r["title"]} (было в ${formatRemindAt(String(r["remind_at"]))})`)
+            .join("\n")}\n\nСообщи пользователю об этих напоминаниях и спроси, что с ними сделать.`
+        : "";
 
-      const due = db
-        .prepare("SELECT * FROM reminders WHERE remind_at <= ? ORDER BY remind_at ASC")
-        .all(nowIso);
-
-      const overdueBlock =
-        due.length > 0
-          ? `\n\n🔔 Просроченные напоминания:\n${due
-              .map((r) => `• [${r["id"]}] ${r["title"]} (было в ${formatRemindAt(String(r["remind_at"]))})`)
-              .join("\n")}\n\nСообщи пользователю об этих напоминаниях и спроси, что с ними сделать.`
-          : "";
-
-      return {
-        prependContext: `🕐 Текущее время: ${nowLocal} (${nowIso})${overdueBlock}`,
-      };
-    },
+    return {
+      prependSystemContext: `🕐 Текущее время: ${nowLocal} (${nowIso})${overdueBlock}`,
+    };
   });
 
   api.registerTool({
     name: "pm_reminder_add",
     description:
-      "Создать напоминание на конкретную дату и время. Если известен sessionKey текущего пользователя — создаёт cron-задачу в OpenClaw, которая сама напомнит в нужный момент.",
+      "Создать напоминание на конкретную дату и время. Сохраняет в БД; в момент следующего разговора с ботом просроченные напоминания будут показаны.",
     parameters: Type.Object({
       title: Type.String({ description: "Текст напоминания" }),
       remind_at: Type.String({
@@ -136,27 +75,8 @@ export function registerReminderTools(api: PluginApi): void {
         .run(title, remindAt.toISOString(), new Date().toISOString());
       const reminderId = result.lastInsertRowid as number;
 
-      let cronNote = "";
-      if (lastSessionKey && lastChannelId) {
-        const cronId = await createCronForReminder(
-          reminderId,
-          title,
-          remindAt,
-          lastSessionKey,
-          lastChannelId,
-        );
-        if (cronId) {
-          db.prepare("UPDATE reminders SET cron_id = ? WHERE id = ?").run(cronId, reminderId);
-          cronNote = " Cron-задача создана — уведомление придёт автоматически.";
-        } else {
-          cronNote = " (cron недоступен — напомню при следующем разговоре)";
-        }
-      } else {
-        cronNote = " (sessionKey ещё неизвестен — напомню при следующем разговоре)";
-      }
-
       return text(
-        `Напоминание ${reminderId} создано: «${title}» на ${formatRemindAt(remindAt.toISOString())}.${cronNote}`,
+        `Напоминание ${reminderId} создано: «${title}» на ${formatRemindAt(remindAt.toISOString())}.`,
       );
     },
   });
@@ -194,18 +114,9 @@ export function registerReminderTools(api: PluginApi): void {
     }),
     async execute(_toolCallId, p) {
       const id = Number(p.id);
-      const row = db.prepare("SELECT cron_id FROM reminders WHERE id = ?").get(id) as
-        | { cron_id: string | null }
-        | undefined;
+      const row = db.prepare("SELECT id FROM reminders WHERE id = ?").get(id);
       if (!row) return text(`Напоминание ${id} не найдено.`);
 
-      if (row.cron_id && cronService) {
-        try {
-          await cronService.remove(row.cron_id);
-        } catch {
-          // cron уже удалён или недоступен — не критично
-        }
-      }
       db.prepare("DELETE FROM reminders WHERE id = ?").run(id);
       return text(`Напоминание ${id} удалено.`);
     },

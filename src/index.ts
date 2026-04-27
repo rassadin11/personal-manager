@@ -28,12 +28,9 @@ export default definePluginEntry({
   description: "Личный менеджер: задачи, напоминания, финансы, заметки.",
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   register(api: any) {
-    api.registerHook({
-      hookName: "before_prompt_build",
-      handler() {
-        return { systemPrompt: SYSTEM_PROMPT };
-      },
-    });
+    api.on("before_prompt_build", async () => ({
+      prependSystemContext: SYSTEM_PROMPT,
+    }));
 
     registerTaskTools(api as Parameters<typeof registerTaskTools>[0]);
     registerReminderTools(api as Parameters<typeof registerReminderTools>[0]);
