@@ -4,8 +4,9 @@ services:
     container_name: personal-manager
     restart: unless-stopped
     environment:
+      HOME: /home/artem
       PM_DATA_DIR: /data
-      OPENCLAW_CONFIG_PATH: /config/openclaw.json
+      OPENCLAW_CONFIG_PATH: /tmp/openclaw.json
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       TZ: ${TZ:-Europe/Moscow}
     volumes:
@@ -13,7 +14,7 @@ services:
       - ./openclaw.json:/config/openclaw.json:ro
       - openclaw-state:/home/artem/.openclaw
     healthcheck:
-      test: ["CMD", "node", "-e", "process.exit(0)"]
+      test: ["CMD-SHELL", "wget -qO- --header=\"Authorization: Bearer ${OPENCLAW_GATEWAY_TOKEN}\" http://127.0.0.1:18789/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

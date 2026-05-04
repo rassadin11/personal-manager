@@ -9,3 +9,4 @@ data/
 openclaw.json
 backups/
 .claude/
+openclaw.*.json
